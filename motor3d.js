@@ -431,7 +431,7 @@
   const xrFragment = `
     precision mediump float;
     uniform vec3 color, key;
-    uniform float selected, metallic, roughness;
+    uniform float selected, metallic, roughness, opacity;
     varying vec3 normal, position;
     void main(){
       vec3 n=normalize(normal), view=normalize(-position);
@@ -440,7 +440,7 @@
       float gloss=pow(max(dot(n,normalize(key+view)),0.0),mix(56.0,10.0,roughness));
       vec3 albedo=mix(color,vec3(.24,.73,.97),selected*.5);
       vec3 lit=albedo*(.55+.6*diffuse)+mix(vec3(.18),color,metallic)*gloss+.09*rim;
-      gl_FragColor=vec4(lit,1.0);
+      gl_FragColor=vec4(lit,opacity);
     }
   `;
   const xrShadowVertex = `
@@ -507,7 +507,7 @@
       phase='preparar o WebGL para XR';
       if(xrGl.makeXRCompatible)await xrGl.makeXRCompatible();
       const gl=xrGl,buffers=modelBuffers(gl);
-      const material=programInfo(xrVertex,xrFragment,['p','n'],['mvp','modelView','color','key','selected','metallic','roughness'],gl);
+      const material=programInfo(xrVertex,xrFragment,['p','n'],['mvp','modelView','color','key','selected','metallic','roughness','opacity'],gl);
       const contactShadow=programInfo(xrShadowVertex,xrShadowFragment,['p'],['mvp','strength'],gl);
       const shadowPlane=upload([-1,0,-1, 1,0,-1, -1,0,1, 1,0,1],gl);
       phase='criar a camada de imagem AR';
@@ -519,7 +519,7 @@
       phase='iniciar o hit-test';
       const viewerSpace=await xrSession.requestReferenceSpace('viewer');const hitSource=await xrSession.requestHitTestSource({space:viewerSpace});
       phase='preparar a interface AR';
-      let placed=null, inverseModel=null, renderedParts=[];
+      let placed=null, inverseModel=null, renderedParts=[], selected=null;
       let floorScan=null;
       let previousTime=null, x=0, z=0, height=0;
       xrYaw=0;
@@ -548,10 +548,11 @@
           const hit=xrRayHit(item.vertices,item.indices,localOrigin,direction,distance);
           if(hit<distance){distance=hit;picked=componentForMesh[item.part]}
         }
-        if(picked){
-          selectPart(picked);
-        }
-        const detail=details[picked];
+        const previous=selected;
+        selected=picked===previous?null:picked;
+        if(selected)selectPart(selected);
+        else if(previous && typeof clearPartSelection==='function')clearPartSelection();
+        const detail=details[selected];
         if(showPartPanel){
           if(detail){
             xrPartName.textContent=detail.title;
@@ -564,6 +565,8 @@
         }
       });
       gl.enable(gl.DEPTH_TEST);gl.disable(gl.CULL_FACE);gl.clearColor(0,0,0,0);
+      gl.depthFunc(gl.LEQUAL);
+      gl.blendFuncSeparate(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA,gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
       const arButton=document.getElementById('arBtn');
       const session=xrSession;
       session.addEventListener('end',()=>{
@@ -607,7 +610,6 @@
           if(xrHint.textContent!==hint)xrHint.textContent=hint;
         }
         advanceView(performance.now());
-        const selected=document.querySelector('.part-card.active')?.dataset.card;
         let model=null, groundModel=null;
         if(placed){
           xrYaw=(xrYaw+moveStick.axes.x*1.8*dt)%(2*Math.PI);
@@ -661,7 +663,9 @@
           gl.uniformMatrix4fv(contactShadow.u.mvp,false,multiply4(projection,multiply4(shadowView,shadowTransform)));
           gl.uniform1f(contactShadow.u.strength,.28/(1+height*3));
           gl.depthMask(false);
+          gl.enable(gl.BLEND);
           gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+          gl.disable(gl.BLEND);
           gl.depthMask(true);
 
           const {a,u}=material;
@@ -669,8 +673,11 @@
           const light=new DOMPoint(-.42,1,.32,0).matrixTransform(DOMMatrix.fromFloat32Array(viewMatrix));
           const length=Math.hypot(light.x,light.y,light.z);
           gl.uniform3f(u.key,light.x/length,light.y/length,light.z/length);
-          for(const {item,off} of renderedParts){
-            const partView=multiply4(modelView,translate4(...off));
+          const parts=renderedParts.map(({item,off})=>({
+            item, partView:multiply4(modelView,translate4(...off)),
+            active:componentForMesh[item.part]===selected
+          }));
+          function drawPart({item,partView,active}){
             gl.bindBuffer(gl.ARRAY_BUFFER,item.buffer);
             gl.enableVertexAttribArray(a.p);gl.vertexAttribPointer(a.p,3,gl.FLOAT,false,24,0);
             gl.enableVertexAttribArray(a.n);gl.vertexAttribPointer(a.n,3,gl.FLOAT,false,24,12);
@@ -680,8 +687,25 @@
             gl.uniform3fv(u.color,item.rgb);
             gl.uniform1f(u.metallic,item.metal);
             gl.uniform1f(u.roughness,item.rough);
-            gl.uniform1f(u.selected,componentForMesh[item.part]===selected?1:0);
+            gl.uniform1f(u.selected,active?1:0);
             gl.drawElements(gl.TRIANGLES,item.count,gl.UNSIGNED_SHORT,0);
+          }
+          gl.uniform1f(u.opacity,1);
+          for(const part of parts){
+            if(!selected || part.active)drawPart(part);
+          }
+          if(selected){
+            const ghosts=parts.filter(part=>!part.active);
+            // Keep just the nearest ghost surface to avoid stacking translucent faces.
+            gl.colorMask(false,false,false,false);
+            for(const part of ghosts)drawPart(part);
+            gl.colorMask(true,true,true,true);
+            gl.depthMask(false);
+            gl.enable(gl.BLEND);
+            gl.uniform1f(u.opacity,.22);
+            for(const part of ghosts)drawPart(part);
+            gl.disable(gl.BLEND);
+            gl.depthMask(true);
           }
         }
       });
