@@ -21,11 +21,40 @@
   const {surfaces,offsets,floor}=model;
   const componentForMesh={housing:'casing',stator:'stator',rotor:'rotor',shaft:'shaft',bearingL:'bearings',bearingR:'bearings',endcapL:'endcaps',endcapR:'endcaps',fan:'fan',fanGuard:'fanGuard',terminal:'terminal',terminalLid:'terminal'};
   const colorCache=new Map();
+  const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
+  let explosion=Number(stage.classList.contains('exploded'));
+  let cutaway=Number(stage.classList.contains('internal'));
+  let transition=null;
+  function advanceView(now){
+    if(!transition)return;
+    const {start,duration,from,to,fromCut,toCut}=transition;
+    const t=reducedMotion.matches?1:Math.min(1,Math.max(0,(now-start)/duration));
+    const ease=t*t*(3-2*t);
+    explosion=from+(to-from)*ease;
+    cutaway=fromCut+(toCut-fromCut)*ease;
+    if(t===1){explosion=to;cutaway=toCut;transition=null}
+  }
+  function changeView(){
+    const now=performance.now();
+    advanceView(now);
+    const to=Number(stage.classList.contains('exploded'));
+    const toCut=Number(stage.classList.contains('internal'));
+    if(transition?.to===to && transition.toCut===toCut)return;
+    const distance=Math.max(Math.abs(to-explosion),Math.abs(toCut-cutaway));
+    transition=distance?{start:now,duration:850*distance,from:explosion,to,fromCut:cutaway,toCut}:null;
+    scheduleDraw();
+  }
+  function partOffset(part){
+    return explosion===0?zeroOffset:offsets[part].map(value=>value*explosion);
+  }
+  function framing(w,h){
+    return Math.min(w/(4.55+8.45*explosion),h/(3.45+.20*explosion))*zoom;
+  }
   function transparent(part){
-    return stage.classList.contains('internal') && ['housing','fanGuard','endcapL','endcapR'].includes(part);
+    return cutaway>0 && ['housing','fanGuard','endcapL','endcapR'].includes(part);
   }
   let drawQueued=false;
-  function scheduleDraw(){if(drawQueued)return;drawQueued=true;requestAnimationFrame(()=>{drawQueued=false;draw()})}
+  function scheduleDraw(){if(drawQueued)return;drawQueued=true;requestAnimationFrame(()=>{drawQueued=false;advanceView(performance.now());draw();if(transition)scheduleDraw()})}
   let glProgram=null,glParts=[];
   // The light sees the motor from above and to the left. Its texture stores the
   // highest surface along each ray, shared by the castings and the floor.
@@ -196,16 +225,15 @@
     if(!w||!h)return;
     const d=Math.min(devicePixelRatio||1,2),pw=Math.round(w*d),ph=Math.round(h*d);
     if(glCanvas.width!==pw||glCanvas.height!==ph){glCanvas.width=pw;glCanvas.height=ph}
-    const exploded=stage.classList.contains('exploded'),internal=stage.classList.contains('internal');
+    const exploded=explosion>0,internal=cutaway>0;
     const selected=document.querySelector('.part-card.active')?.dataset.card;
-    const offset=part=>exploded?offsets[part]:zeroOffset;
-    const lightWidth=exploded?15:5.6;
-    const shadowMode=exploded?'exploded':internal?'internal':'assembled';
+    const lightWidth=5.6+9.4*explosion;
+    const shadowMode=internal?-1-explosion:explosion;
     if(lastShadowMode!==shadowMode){
       gl.bindFramebuffer(gl.FRAMEBUFFER,shadowTarget);gl.viewport(0,0,shadowSize,shadowSize);
       gl.clearColor(0,0,0,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
       gl.useProgram(shadow.program);gl.uniform1f(shadow.u.lightWidth,lightWidth);
-      for(const item of glParts)if(!transparent(item.part))renderPart(item,shadow,offset(item.part));
+      for(const item of glParts)if(!transparent(item.part))renderPart(item,shadow,partOffset(item.part));
       gl.bindFramebuffer(gl.FRAMEBUFFER,null);lastShadowMode=shadowMode;
     }
     gl.viewport(0,0,pw,ph);gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
@@ -213,7 +241,7 @@
     const u=studio.u;
     gl.uniform1i(u.shadowMap,0);gl.uniform1i(u.grainMap,1);
     gl.uniform1f(u.lightWidth,lightWidth);gl.uniform2f(u.viewport,w,h);
-    gl.uniform1f(u.scale,Math.min(w/(exploded?13:4.55),h/(exploded?3.65:3.45))*zoom);
+    gl.uniform1f(u.scale,framing(w,h));
     gl.uniform1f(u.yaw,yaw);gl.uniform1f(u.pitch,pitch);
     gl.uniform3f(u.eye,Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),Math.cos(yaw)*Math.cos(pitch));
     if(pitch>.015){
@@ -223,13 +251,13 @@
     gl.uniform1f(u.floorPass,0);gl.disable(gl.BLEND);gl.depthMask(true);
     for(const shell of [false,true]){
       if(shell){gl.enable(gl.BLEND);gl.depthMask(false)}
-      gl.uniform1f(u.opacity,shell?.13:1);
+      gl.uniform1f(u.opacity,shell?1-.87*cutaway:1);
       for(const item of glParts){
         if(transparent(item.part)!==shell)continue;
         const hiddenCore=!exploded&&!internal&&['rotor','stator'].includes(item.part);
         if(hiddenCore)continue;
         gl.uniform1f(u.selected,componentForMesh[item.part]===selected?1:0);
-        renderPart(item,studio,offset(item.part));
+        renderPart(item,studio,partOffset(item.part));
       }
     }
     // Selecting a concealed core in assembled mode retains the inspection overlay.
@@ -243,15 +271,15 @@
   function resize(){const r=host.getBoundingClientRect(),d=Math.min(devicePixelRatio||1,2);canvas.width=Math.max(1,Math.round(r.width*d));canvas.height=Math.max(1,Math.round(r.height*d));canvas.style.width=r.width+'px';canvas.style.height=r.height+'px';ctx.setTransform(d,0,0,d,0,0);draw()}
   // Project indexed vertices once per surface for picking and the software renderer.
   function projectScene(w,h){
-    const exploded=stage.classList.contains('exploded'),internal=stage.classList.contains('internal');
+    const exploded=explosion>0,internal=cutaway>0;
     const selected=document.querySelector('.part-card.active')?.dataset.card;
-    const scale=Math.min(w/(exploded?13:4.55),h/(exploded?3.65:3.45))*zoom;
+    const scale=framing(w,h);
     const cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);
     const result=[];
     for(const surface of surfaces){
       const {part,vertices}=surface;
       if(!exploded&&!internal&&['rotor','stator'].includes(part)&&selected!==part)continue;
-      const off=exploded?offsets[part]:zeroOffset, points=new Float32Array(vertices.length/2);
+      const off=partOffset(part), points=new Float32Array(vertices.length/2);
       for(let i=0,j=0;i<vertices.length;i+=6,j+=3){
         const x=vertices[i]+off[0],y=vertices[i+1]+off[1],z=vertices[i+2]+off[2];
         const rz=x*sy+z*cy,depth=y*sp+rz*cp, k=scale/(1-depth*.033);
@@ -274,7 +302,7 @@
         const n=2*a+3,level=Math.round(24*(.49+.58*Math.max(0,-.4*vertices[n]+.81*vertices[n+1]+.42*vertices[n+2])));
         const key=surface.name+':'+level;
         if(!colorCache.has(key))colorCache.set(key,'rgb('+rgb.map(v=>Math.min(255,Math.round(v*255*level/24))).join(',')+')');
-        faces.push({points,a,b,c,z:points[a+2]+points[b+2]+points[c+2],alpha:transparent(part)?.16:1,
+        faces.push({points,a,b,c,z:points[a+2]+points[b+2]+points[c+2],alpha:transparent(part)?1-.84*cutaway:1,
           color:componentForMesh[part]===selected?'#559fcb':colorCache.get(key)});
       }
     }
@@ -286,7 +314,7 @@
     ctx.globalAlpha=1;
   }
   try{initGlRenderer()}catch(error){console.warn('WebGL renderer unavailable; using canvas fallback.',error);glProgram=null}
-  new ResizeObserver(resize).observe(host);resize();new MutationObserver(scheduleDraw).observe(stage,{attributes:true,attributeFilter:['class']});
+  new ResizeObserver(resize).observe(host);resize();new MutationObserver(changeView).observe(stage,{attributes:true,attributeFilter:['class']});
   const dragCanvas=glProgram?glCanvas:canvas;
   dragCanvas.addEventListener('pointerdown',e=>{e.stopPropagation();dragging=true;moved=false;sx=lx=e.clientX;sy=ly=e.clientY;dragCanvas.setPointerCapture(e.pointerId)});
   dragCanvas.addEventListener('pointermove',e=>{e.stopPropagation();if(!dragging)return;yaw-=(e.clientX-lx)*.009;pitch=Math.max(-.55,Math.min(.55,pitch+(e.clientY-ly)*.006));lx=e.clientX;ly=e.clientY;if(Math.hypot(e.clientX-sx,e.clientY-sy)>5)moved=true;scheduleDraw()});
@@ -369,11 +397,11 @@
       xrSession.requestAnimationFrame(function frame(_time,xrFrame){
         if(!xrSession)return;xrSession.requestAnimationFrame(frame);const session=xrFrame.session,pose=xrFrame.getViewerPose(referenceSpace);if(!pose)return;
         if(!placed){for(const hit of xrFrame.getHitTestResults(hitSource)){const hitPose=hit.getPose(referenceSpace);if(hitPose&&Math.abs(hitPose.transform.matrix[5])>.85){placed=hitPose.transform.matrix;break}}if(placed)document.getElementById('xrHint').textContent='MOTOR POSICIONADO NA SUPERFÍCIE · TOQUE EM SAIR PARA ENCERRAR'}
-        gl.bindFramebuffer(gl.FRAMEBUFFER,session.renderState.baseLayer.framebuffer);const exploded=stage.classList.contains('exploded'),selected=document.querySelector('.part-card.active')?.dataset.card;
+        advanceView(performance.now());gl.bindFramebuffer(gl.FRAMEBUFFER,session.renderState.baseLayer.framebuffer);const exploded=explosion>0,selected=document.querySelector('.part-card.active')?.dataset.card;
         for(const view of pose.views){const vp=session.renderState.baseLayer.getViewport(view);gl.viewport(vp.x,vp.y,vp.width,vp.height);gl.scissor(vp.x,vp.y,vp.width,vp.height);gl.enable(gl.SCISSOR_TEST);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);if(!placed)continue;
           const yaw=rotateY4(xrYaw),scale=scale4(.25),lift=translate4(0,-floor,0),model=multiply4(placed,multiply4(yaw,multiply4(scale,lift)));
           gl.useProgram(program);gl.bindBuffer(gl.ARRAY_BUFFER,null);
-        for(const item of buffers){const selectedItem=componentForMesh[item.part]===selected;if(!exploded&&(item.part==='stator'||item.part==='rotor')&&selected!==item.part)continue;const off=exploded?(offsets[item.part]||[0,0,0]):[0,0,0],offset=translate4(off[0],off[1],off[2]),m=multiply4(model,offset),mvp=multiply4(view.projectionMatrix,multiply4(view.transform.inverse.matrix,m));
+        for(const item of buffers){const selectedItem=componentForMesh[item.part]===selected;if(!exploded&&(item.part==='stator'||item.part==='rotor')&&selected!==item.part)continue;const off=partOffset(item.part),offset=translate4(off[0],off[1],off[2]),m=multiply4(model,offset),mvp=multiply4(view.projectionMatrix,multiply4(view.transform.inverse.matrix,m));
             gl.bindBuffer(gl.ARRAY_BUFFER,item.buffer);gl.enableVertexAttribArray(pos);gl.vertexAttribPointer(pos,3,gl.FLOAT,false,24,0);gl.disableVertexAttribArray(col);gl.vertexAttrib3fv(col,item.rgb);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,item.indexBuffer);gl.uniformMatrix4fv(mvpLoc,false,mvp);gl.uniform1f(selectedLoc,selectedItem?1:0);gl.drawElements(gl.TRIANGLES,item.count,gl.UNSIGNED_SHORT,0)}
         }
       });
