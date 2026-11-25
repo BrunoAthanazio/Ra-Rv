@@ -367,8 +367,8 @@
     function move(x,y){
       const length=Math.max(1,Math.hypot(x,y));
       axes.x=x/length;axes.y=y/length;
-      element?.style.setProperty('--stick-x',`${axes.x*22}px`);
-      element?.style.setProperty('--stick-y',`${axes.y*22}px`);
+      element?.style.setProperty('--stick-x',`${axes.x*44}px`);
+      element?.style.setProperty('--stick-y',`${axes.y*44}px`);
     }
     function reset(){
       const captured=pointer;
@@ -380,8 +380,11 @@
     function movePointer(event){
       if(event.pointerId!==pointer)return;
       const box=element.getBoundingClientRect();
-      move(verticalOnly?0:(event.clientX-box.left-box.width/2)/25,
-        (event.clientY-box.top-box.height/2)/25);
+      const x=verticalOnly?0:(event.clientX-box.left-box.width/2)/50;
+      const y=(event.clientY-box.top-box.height/2)/50;
+      // Suppress slight horizontal drift near the vertical axis.
+      const filteredX=Math.sign(x)*Math.max(0,Math.abs(x)-.36*Math.abs(y));
+      move(filteredX,y);
     }
     element?.addEventListener('pointerdown',event=>{
       if(pointer!==null || event.button!==0)return;

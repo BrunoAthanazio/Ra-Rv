@@ -192,8 +192,8 @@ body.xr-active #xrOverlay { display: block; }
 .xr-stick-group:last-child { justify-self: end; }
 .xr-stick-group > span { background: #12324bee; border-radius: 4px; padding: 3px 5px; font-size: 12px; }
 .xr-stick {
-  width: 76px;
-  height: 76px;
+  width: 152px;
+  height: 152px;
   border: 1px solid #ffffff80;
   border-radius: 50%;
   background: #12324bee;
@@ -202,17 +202,17 @@ body.xr-active #xrOverlay { display: block; }
   touch-action: none;
   user-select: none;
 }
-.xr-stick-vertical { width: 48px; border-radius: 24px; }
+.xr-stick-vertical { width: 96px; border-radius: 48px; }
 .xr-stick-thumb {
-  width: 32px;
-  height: 32px;
+  width: 64px;
+  height: 64px;
   border: 2px solid #c6e8ff;
   border-radius: 50%;
   background: var(--blue);
   pointer-events: none;
   transform: translate(var(--stick-x, 0px), var(--stick-y, 0px));
 }
-body.xr-active:has(.xr-joysticks) :is(#xrHint, #xrPartInfo) { bottom: calc(env(safe-area-inset-bottom) + 126px); }
+body.xr-active:has(.xr-joysticks) :is(#xrHint, #xrPartInfo) { bottom: calc(env(safe-area-inset-bottom) + 202px); }
 #xrOverlay :focus-visible { outline: 3px solid var(--white); outline-offset: 3px; }
 
 @media (max-width: 1050px) {
@@ -228,6 +228,11 @@ body.xr-active:has(.xr-joysticks) :is(#xrHint, #xrPartInfo) { bottom: calc(env(s
   .view-btn, .primary, .secondary { padding-inline: 9px; font-size: 13px; }
   .stage-head, .toolbar { padding-inline: 10px; }
   .parts-head h2 { font-size: 18px; }
+}
+@media (max-width: 560px) {
+  #xrControls.xr-joysticks { grid-template-columns: 1fr 1fr; }
+  .xr-joysticks > button { grid-row: 1; grid-column: 1 / -1; justify-self: center; }
+  body.xr-active:has(.xr-joysticks) :is(#xrHint, #xrPartInfo) { bottom: calc(env(safe-area-inset-bottom) + 252px); }
 }
 @media (prefers-reduced-motion: reduce) {
   .part, .part-card, .toast { transition: none; }
