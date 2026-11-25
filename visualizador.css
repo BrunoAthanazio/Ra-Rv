@@ -45,7 +45,7 @@ h1 { margin: 8px 0; font-size: clamp(30px, 4vw, 44px); line-height: 1.08; letter
 h2 { margin: 0; font-size: 21px; }
 .subtitle { margin: 0; color: var(--muted); line-height: 1.5; }
 .main { min-width: 0; }
-.viewer, .sidebar, .part-card {
+.viewer, .sidebar, .components-panel, .part-card {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--white);
@@ -121,15 +121,17 @@ h2 { margin: 0; font-size: 21px; }
 .tool-hint b { color: var(--ink); font-size: 14px; }
 .tool-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
 
-.parts-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 26px 0 12px; }
+.right-column { min-width: 0; align-self: start; display: grid; gap: 20px; }
+.components-panel { padding: 16px; }
+.parts-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px; margin-bottom: 12px; }
 .parts-head span { color: var(--muted); font-size: 13px; }
-.part-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.part-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .part-card {
   display: flex;
   flex-direction: column;
   gap: 5px;
   min-width: 0;
-  padding: 15px 13px;
+  padding: 10px;
   text-align: left;
   border-left-width: 3px;
   transition: border-color .2s, background-color .2s;
@@ -155,14 +157,18 @@ h2 { margin: 0; font-size: 21px; }
 #xrOverlay { display: none; position: fixed; inset: 0; z-index: 10000; pointer-events: none; color: var(--white); }
 body.xr-active .shell, body.xr-active .header-band { display: none; }
 body.xr-active #xrOverlay { display: block; }
-#xrExit, #xrHint, #xrControls {
+#xrExit, #xrHint, #xrPartInfo, #xrControls {
   position: absolute;
   border: 1px solid #ffffff70;
   border-radius: var(--radius);
   background: #12324bee;
 }
 #xrExit { pointer-events: auto; top: calc(env(safe-area-inset-top) + 16px); right: 16px; color: var(--white); min-height: 44px; padding: 8px 14px; }
-#xrHint { bottom: calc(env(safe-area-inset-bottom) + 112px); left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 28px); padding: 10px 12px; text-align: center; font-size: 13px; }
+#xrHint, #xrPartInfo { bottom: calc(env(safe-area-inset-bottom) + 112px); left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 28px); padding: 10px 12px; font-size: 13px; }
+#xrHint { text-align: center; }
+#xrPartInfo { width: min(420px, calc(100% - 28px)); line-height: 1.45; }
+#xrPartInfo strong { font-size: 16px; }
+#xrPartInfo p { margin: 4px 0 0; }
 #xrControls { pointer-events: auto; bottom: calc(env(safe-area-inset-bottom) + 16px); left: 50%; transform: translateX(-50%); width: min(680px, 100% - 28px); display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px 10px; padding: 10px; }
 #xrAngleValue { margin-left: 6px; color: #c6e8ff; }
 #xrAngle { grid-column: 1 / -1; width: 100%; margin: 0; accent-color: #68c4ff; touch-action: pan-x; }
@@ -171,7 +177,6 @@ body.xr-active #xrOverlay { display: block; }
 @media (max-width: 940px) {
   .shell { width: min(100% - 40px, 1440px); }
   .layout { grid-template-columns: minmax(0, 1fr) minmax(240px, 30%); gap: 16px; }
-  .part-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 760px) {
   .shell { width: calc(100% - 28px); }

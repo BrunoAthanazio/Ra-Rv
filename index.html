@@ -44,28 +44,32 @@
         </div>
         <div class="toolbar"><div class="tool-hint"><b id="hintTitle">Motor W22</b><br><span id="hintText">Selecione um componente para explorar</span></div><div class="tool-buttons"><button class="secondary" id="resetBtn">Reiniciar</button><button class="primary" id="arBtn">Ver no meu espaço</button></div></div>
       </div>
-        <div class="parts-head"><h2>Componentes do motor</h2><span>9 componentes</span></div>
+    </section>
+    <aside class="right-column" aria-label="Componentes e ficha do motor">
+      <section class="components-panel" aria-labelledby="componentsTitle">
+        <div class="parts-head"><h2 id="componentsTitle">Componentes do motor</h2><span>9 componentes</span></div>
         <div class="part-list" id="partList"><button class="part-card" aria-pressed="false" data-card="casing"><strong>Carcaça</strong><small>Estrutura e aletas de refrigeração</small></button><button class="part-card" aria-pressed="false" data-card="stator"><strong>Estator</strong><small>Núcleo laminado e enrolamentos</small></button><button class="part-card" aria-pressed="false" data-card="rotor"><strong>Rotor</strong><small>Gaiola condutora girante</small></button><button class="part-card" aria-pressed="false" data-card="shaft"><strong>Eixo</strong><small>Transmissão mecânica</small></button><button class="part-card" aria-pressed="false" data-card="bearings"><strong>Rolamentos</strong><small>Apoio do eixo nos dois lados</small></button><button class="part-card" aria-pressed="false" data-card="endcaps"><strong>Tampas</strong><small>Fechamento frontal e traseiro</small></button><button class="part-card" aria-pressed="false" data-card="fan"><strong>Ventilador</strong><small>Impulsor de refrigeração</small></button><button class="part-card" aria-pressed="false" data-card="fanGuard"><strong>Proteção do ventilador</strong><small>Carcaça protetora traseira</small></button><button class="part-card" aria-pressed="false" data-card="terminal"><strong>Caixa de ligação</strong><small>Terminais elétricos protegidos</small></button></div>
       </section>
-    <aside class="sidebar" aria-labelledby="productTitle">
-      <div class="side-title"><h2 id="productTitle">Ficha do motor</h2></div>
-      <div class="product-image"><img src="./w22-weg.webp" alt="Motor industrial azul WEG W22 com caixa de ligação superior e pés de montagem"></div>
-      <div class="sidebar-content">
-        <p class="description">Motor elétrico WEG W22 para aplicações industriais.</p>
-        <dl class="specs">
-          <div class="spec"><dt>Linha</dt><dd>W22</dd></div>
-          <div class="spec"><dt>Tipo</dt><dd>Trifásico</dd></div>
-          <div class="spec"><dt>Construção</dt><dd>Fechada</dd></div>
-        </dl>
-        <div class="focus-box" aria-live="polite">
-          <div class="focus-label">Componente em foco</div>
-          <h3 id="focusTitle">Explore o motor</h3>
-          <p id="focusText">Selecione uma peça para descobrir como ela funciona.</p>
+      <section class="sidebar" aria-labelledby="productTitle">
+        <div class="side-title"><h2 id="productTitle">Ficha do motor</h2></div>
+        <div class="product-image"><img src="./w22-weg.webp" alt="Motor industrial azul WEG W22 com caixa de ligação superior e pés de montagem"></div>
+        <div class="sidebar-content">
+          <p class="description">Motor elétrico WEG W22 para aplicações industriais.</p>
+          <dl class="specs">
+            <div class="spec"><dt>Linha</dt><dd>W22</dd></div>
+            <div class="spec"><dt>Tipo</dt><dd>Trifásico</dd></div>
+            <div class="spec"><dt>Construção</dt><dd>Fechada</dd></div>
+          </dl>
+          <div class="focus-box" aria-live="polite">
+            <div class="focus-label">Componente em foco</div>
+            <h3 id="focusTitle">Explore o motor</h3>
+            <p id="focusText">Selecione uma peça para descobrir como ela funciona.</p>
+          </div>
         </div>
-      </div>
+      </section>
     </aside>
   </main>
-  <div id="xrOverlay"><button id="xrExit" type="button">× &nbsp; SAIR DA REALIDADE AUMENTADA</button><div id="xrHint">APONTE PARA O CHÃO E MOVA O DISPOSITIVO</div><div id="xrControls"><label id="xrAngleLabel" for="xrAngle">ROTAÇÃO <output id="xrAngleValue">0°</output></label><button id="xrExplode" class="primary" type="button">EXPLODIR MOTOR</button><input id="xrAngle" type="range" min="0" max="360" step="1" value="0" aria-label="Girar o motor de zero a 360 graus"></div></div>
+  <div id="xrOverlay"><button id="xrExit" type="button">× &nbsp; SAIR DA REALIDADE AUMENTADA</button><div id="xrHint">APONTE PARA O CHÃO E MOVA O DISPOSITIVO</div><div id="xrPartInfo" role="status" aria-atomic="true" hidden><strong id="xrPartName"></strong><p id="xrPartDescription"></p></div><div id="xrControls"><label id="xrAngleLabel" for="xrAngle">ROTAÇÃO <output id="xrAngleValue">0°</output></label><button id="xrExplode" class="primary" type="button">EXPLODIR MOTOR</button><input id="xrAngle" type="range" min="0" max="360" step="1" value="0" aria-label="Girar o motor de zero a 360 graus"></div></div>
   <script>
     const details={casing:{title:'Carcaça',text:'Estrutura externa com aletas que protege o conjunto e ajuda a dissipar o calor.',hint:'Estrutura e aletas de refrigeração.'},stator:{title:'Estator',text:'Núcleo laminado e enrolamentos fixos que produzem o campo magnético do motor.',hint:'Núcleo laminado e enrolamentos de cobre.'},rotor:{title:'Rotor',text:'Gaiola condutora que gira dentro do estator e transforma o campo magnético em torque.',hint:'Gaiola condutora girante.'},shaft:{title:'Eixo',text:'Peça que atravessa o rotor e leva a potência mecânica para a aplicação.',hint:'Transmissão mecânica.'},bearings:{title:'Rolamentos',text:'Rolamentos nas duas extremidades sustentam o eixo e permitem sua rotação.',hint:'Apoio do eixo nos dois lados.'},endcaps:{title:'Tampas',text:'Tampas dianteira e traseira fecham a carcaça e alojam os rolamentos.',hint:'Fechamento e alojamento dos rolamentos.'},fan:{title:'Ventilador',text:'Impulsor traseiro que movimenta o ar para refrigerar o motor durante o funcionamento.',hint:'Impulsor de refrigeração.'},fanGuard:{title:'Proteção do ventilador',text:'Cobertura traseira que protege o ventilador e direciona o fluxo de ar.',hint:'Proteção traseira e guia do fluxo de ar.'},terminal:{title:'Caixa de ligação',text:'Compartimento que protege os terminais usados para conectar o motor à alimentação elétrica.',hint:'Terminais elétricos protegidos.'}};
     const stage=document.getElementById('stage'),toast=document.getElementById('toast');let toastTimer,angle=0;

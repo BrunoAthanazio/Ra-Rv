@@ -138,7 +138,8 @@
   const shadowSize=1024;
   const zeroOffset=[0,0,0];
 
-  function programInfo(vertex,fragment,attributes,uniforms){
+  function programInfo(vertex,fragment,attributes,uniforms,context=gl){
+    const gl=context;
     const program=gl.createProgram();
     for(const [type,source] of [[gl.VERTEX_SHADER,vertex],[gl.FRAGMENT_SHADER,fragment]]){
       const shader=gl.createShader(type);
@@ -155,7 +156,8 @@
     for(const name of uniforms)u[name]=gl.getUniformLocation(program,name);
     return {program,a,u};
   }
-  function upload(data){
+  function upload(data,context=gl){
+    const gl=context;
     const buffer=gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
     gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(data),gl.STATIC_DRAW);
@@ -347,6 +349,11 @@
   if(navigator.xr?.isSessionSupported)navigator.xr.isSessionSupported('immersive-ar').then(value=>{immersiveArSupport=value}).catch(()=>{immersiveArSupport=false});
   let xrYaw=0;
   const xrAngle=document.getElementById('xrAngle'),xrAngleValue=document.getElementById('xrAngleValue'),xrExplode=document.getElementById('xrExplode');
+  const xrHint=document.getElementById('xrHint'), xrPartInfo=document.getElementById('xrPartInfo');
+  const xrPartName=document.getElementById('xrPartName'), xrPartDescription=document.getElementById('xrPartDescription');
+  for(const id of ['xrExit','xrControls']){
+    document.getElementById(id).addEventListener('beforexrselect',event=>event.preventDefault());
+  }
   xrAngle.addEventListener('input',()=>{xrYaw=Number(xrAngle.value)*Math.PI/180;xrAngleValue.value=`${xrAngle.value}°`;xrAngleValue.textContent=`${xrAngle.value}°`});
   function syncXrExplodeLabel(){xrExplode.textContent=stage.classList.contains('exploded')?'MONTAR MOTOR':'EXPLODIR MOTOR'}
   xrExplode.addEventListener('click',()=>{const view=stage.classList.contains('exploded')?'assembled':'exploded';document.querySelector(`.view-btn[data-view="${view}"]`)?.click();syncXrExplodeLabel()});
@@ -355,7 +362,69 @@
   function translate4(x,y,z){return new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,x,y,z,1])}
   function rotateY4(a){const c=Math.cos(a),s=Math.sin(a);return new Float32Array([c,0,-s,0,0,1,0,0,s,0,c,0,0,0,0,1])}
   function scale4(s){return new Float32Array([s,0,0,0,0,s,0,0,0,0,s,0,0,0,0,1])}
-  function makeProgram(gl){const vs=gl.createShader(gl.VERTEX_SHADER);gl.shaderSource(vs,'attribute vec3 p; attribute vec3 c; uniform mat4 mvp; varying vec3 color; void main(){gl_Position=mvp*vec4(p,1.0);color=c;}');gl.compileShader(vs);if(!gl.getShaderParameter(vs,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(vs));const fs=gl.createShader(gl.FRAGMENT_SHADER);gl.shaderSource(fs,'precision mediump float; uniform float selected; varying vec3 color; void main(){vec3 lit=mix(color,vec3(0.25,0.8,1.0),selected*0.64);gl_FragColor=vec4(lit,1.0);}');gl.compileShader(fs);if(!gl.getShaderParameter(fs,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(fs));const program=gl.createProgram();gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(program));return program}
+  const xrVertex = `
+    attribute vec3 p, n;
+    uniform mat4 mvp, modelView;
+    varying vec3 normal, position;
+    void main(){
+      gl_Position=mvp*vec4(p,1.0);
+      normal=mat3(modelView)*n;
+      position=(modelView*vec4(p,1.0)).xyz;
+    }
+  `;
+  const xrFragment = `
+    precision mediump float;
+    uniform vec3 color, key;
+    uniform float selected, metallic, roughness;
+    varying vec3 normal, position;
+    void main(){
+      vec3 n=normalize(normal), view=normalize(-position);
+      float diffuse=max(dot(n,key),0.0);
+      float rim=pow(1.0-max(dot(n,view),0.0),3.0);
+      float gloss=pow(max(dot(n,normalize(key+view)),0.0),mix(56.0,10.0,roughness));
+      vec3 albedo=mix(color,vec3(.24,.73,.97),selected*.5);
+      vec3 lit=albedo*(.55+.6*diffuse)+mix(vec3(.18),color,metallic)*gloss+.09*rim;
+      gl_FragColor=vec4(lit,1.0);
+    }
+  `;
+  const xrShadowVertex = `
+    attribute vec3 p;
+    uniform mat4 mvp;
+    varying vec2 uv;
+    void main(){uv=p.xz;gl_Position=mvp*vec4(p,1.0);}
+  `;
+  const xrShadowFragment = `
+    precision mediump float;
+    varying vec2 uv;
+    void main(){
+      float radius=length(uv);
+      float opacity=(1.0-smoothstep(.22,1.0,radius))*.28;
+      gl_FragColor=vec4(0.0,0.0,0.0,opacity);
+    }
+  `;
+  function xrPartVisible(part,selected){
+    return explosion>0 || (part!=='stator' && part!=='rotor') || selected===part;
+  }
+  function xrRayHit(vertices,indices,origin,direction,limit){
+    let closest=limit;
+    for(let i=0;i<indices.length;i+=3){
+      const a=indices[i]*6,b=indices[i+1]*6,c=indices[i+2]*6;
+      const abx=vertices[b]-vertices[a],aby=vertices[b+1]-vertices[a+1],abz=vertices[b+2]-vertices[a+2];
+      const acx=vertices[c]-vertices[a],acy=vertices[c+1]-vertices[a+1],acz=vertices[c+2]-vertices[a+2];
+      const px=direction.y*acz-direction.z*acy,py=direction.z*acx-direction.x*acz,pz=direction.x*acy-direction.y*acx;
+      const determinant=abx*px+aby*py+abz*pz;
+      if(Math.abs(determinant)<1e-8)continue;
+      const tx=origin.x-vertices[a],ty=origin.y-vertices[a+1],tz=origin.z-vertices[a+2];
+      const u=(tx*px+ty*py+tz*pz)/determinant;
+      if(u<0 || u>1)continue;
+      const qx=ty*abz-tz*aby,qy=tz*abx-tx*abz,qz=tx*aby-ty*abx;
+      const v=(direction.x*qx+direction.y*qy+direction.z*qz)/determinant;
+      if(v<0 || u+v>1)continue;
+      const distance=(acx*qx+acy*qy+acz*qz)/determinant;
+      if(distance>0 && distance<closest)closest=distance;
+    }
+    return closest;
+  }
   function modelBuffers(context){
     return surfaces.map(surface=>{
       const buffer=context.createBuffer(),indexBuffer=context.createBuffer();
@@ -372,7 +441,7 @@
     let phase='preparar o contexto gráfico';
     try{
       xrCanvas=document.createElement('canvas');xrGl=xrCanvas.getContext('webgl',{alpha:true,antialias:true})||xrCanvas.getContext('experimental-webgl',{alpha:true,antialias:true});if(!xrGl)throw Error('WebGL indisponível');
-      const init={optionalFeatures:['hit-test','dom-overlay'],domOverlay:{root:document.getElementById('xrOverlay')}};
+      const init={requiredFeatures:['hit-test','dom-overlay'],domOverlay:{root:document.getElementById('xrOverlay')}};
       // requestSession must be called in the original button gesture; awaiting
       // capability checks or context preparation first loses transient activation.
       phase='abrir a sessão immersive-ar';
@@ -380,7 +449,10 @@
       xrSession=await sessionRequest;window.motorXRSession=xrSession;
       phase='preparar o WebGL para XR';
       if(xrGl.makeXRCompatible)await xrGl.makeXRCompatible();
-      const gl=xrGl,program=makeProgram(gl),buffers=modelBuffers(gl),pos=gl.getAttribLocation(program,'p'),col=gl.getAttribLocation(program,'c'),mvpLoc=gl.getUniformLocation(program,'mvp'),selectedLoc=gl.getUniformLocation(program,'selected');
+      const gl=xrGl,buffers=modelBuffers(gl);
+      const material=programInfo(xrVertex,xrFragment,['p','n'],['mvp','modelView','color','key','selected','metallic','roughness'],gl);
+      const contactShadow=programInfo(xrShadowVertex,xrShadowFragment,['p'],['mvp'],gl);
+      const shadowPlane=upload([-1,0,-1, 1,0,-1, -1,0,1, 1,0,1],gl);
       phase='criar a camada de imagem AR';
       const layer=new XRWebGLLayer(xrSession,gl,{alpha:true,antialias:true});xrSession.updateRenderState({baseLayer:layer});
       phase='obter a referência espacial';
@@ -389,20 +461,103 @@
       catch(error){if(error?.name!=='NotSupportedError')throw error;referenceSpace=await xrSession.requestReferenceSpace('local')}
       phase='iniciar o hit-test';
       const viewerSpace=await xrSession.requestReferenceSpace('viewer');const hitSource=await xrSession.requestHitTestSource({space:viewerSpace});
-      let placed=null;xrYaw=0;xrAngle.value='0';xrAngleValue.value='0°';xrAngleValue.textContent='0°';syncXrExplodeLabel();document.body.classList.add('xr-active');document.getElementById('xrHint').textContent='APONTE PARA O CHÃO · O MOTOR SERÁ POSICIONADO NA PRIMEIRA SUPERFÍCIE HORIZONTAL';
-      if(!xrSession.domOverlayState)xrSession.addEventListener('select',()=>xrSession?.end());
+      let placed=null, inverseModel=null, renderedParts=[];
+      xrYaw=0;xrAngle.value='0';xrAngleValue.value='0°';xrAngleValue.textContent='0°';syncXrExplodeLabel();
+      xrPartInfo.hidden=true;
+      xrHint.hidden=false;
+      xrHint.textContent='Aponte para o chão para posicionar o motor.';
+      document.body.classList.add('xr-active');
+      xrSession.addEventListener('select',event=>{
+        if(!inverseModel)return;
+        const ray=event.frame.getPose(event.inputSource.targetRaySpace,referenceSpace);
+        if(!ray)return;
+        const matrix=ray.transform.matrix;
+        const origin=inverseModel.transformPoint(new DOMPoint(matrix[12],matrix[13],matrix[14]));
+        const direction=inverseModel.transformPoint(new DOMPoint(-matrix[8],-matrix[9],-matrix[10],0));
+        let distance=Infinity, picked=null;
+        for(const {item,off} of renderedParts){
+          const localOrigin={x:origin.x-off[0],y:origin.y-off[1],z:origin.z-off[2]};
+          const hit=xrRayHit(item.vertices,item.indices,localOrigin,direction,distance);
+          if(hit<distance){distance=hit;picked=componentForMesh[item.part]}
+        }
+        if(picked){
+          selectPart(picked);
+          xrPartName.textContent=details[picked].title;
+          xrPartDescription.textContent=details[picked].text;
+        }
+        xrPartInfo.hidden=!picked;
+        xrHint.hidden=Boolean(picked);
+      });
       gl.enable(gl.DEPTH_TEST);gl.disable(gl.CULL_FACE);gl.clearColor(0,0,0,0);
-      xrSession.addEventListener('end',()=>{document.body.classList.remove('xr-active');document.getElementById('arBtn').innerHTML='◎ &nbsp; VER NO MEU ESPAÇO';xrSession=null;window.motorXRSession=null;placed=null;scheduleDraw()},{once:true});
-      document.getElementById('arBtn').innerHTML='× &nbsp; SAIR DA REALIDADE AUMENTADA';
-      xrSession.requestAnimationFrame(function frame(_time,xrFrame){
-        if(!xrSession)return;xrSession.requestAnimationFrame(frame);const session=xrFrame.session,pose=xrFrame.getViewerPose(referenceSpace);if(!pose)return;
-        if(!placed){for(const hit of xrFrame.getHitTestResults(hitSource)){const hitPose=hit.getPose(referenceSpace);if(hitPose&&Math.abs(hitPose.transform.matrix[5])>.85){placed=hitPose.transform.matrix;break}}if(placed)document.getElementById('xrHint').textContent='MOTOR POSICIONADO NA SUPERFÍCIE · TOQUE EM SAIR PARA ENCERRAR'}
-        advanceView(performance.now());gl.bindFramebuffer(gl.FRAMEBUFFER,session.renderState.baseLayer.framebuffer);const exploded=explosion>0,selected=document.querySelector('.part-card.active')?.dataset.card;
-        for(const view of pose.views){const vp=session.renderState.baseLayer.getViewport(view);gl.viewport(vp.x,vp.y,vp.width,vp.height);gl.scissor(vp.x,vp.y,vp.width,vp.height);gl.enable(gl.SCISSOR_TEST);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);if(!placed)continue;
-          const yaw=rotateY4(xrYaw),scale=scale4(.25),lift=translate4(0,-floor,0),model=multiply4(placed,multiply4(yaw,multiply4(scale,lift)));
-          gl.useProgram(program);gl.bindBuffer(gl.ARRAY_BUFFER,null);
-        for(const item of buffers){const selectedItem=componentForMesh[item.part]===selected;if(!exploded&&(item.part==='stator'||item.part==='rotor')&&selected!==item.part)continue;const off=partOffset(item.part),offset=translate4(off[0],off[1],off[2]),m=multiply4(model,offset),mvp=multiply4(view.projectionMatrix,multiply4(view.transform.inverse.matrix,m));
-            gl.bindBuffer(gl.ARRAY_BUFFER,item.buffer);gl.enableVertexAttribArray(pos);gl.vertexAttribPointer(pos,3,gl.FLOAT,false,24,0);gl.disableVertexAttribArray(col);gl.vertexAttrib3fv(col,item.rgb);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,item.indexBuffer);gl.uniformMatrix4fv(mvpLoc,false,mvp);gl.uniform1f(selectedLoc,selectedItem?1:0);gl.drawElements(gl.TRIANGLES,item.count,gl.UNSIGNED_SHORT,0)}
+      const arButton=document.getElementById('arBtn');
+      const session=xrSession;
+      session.addEventListener('end',()=>{
+        document.body.classList.remove('xr-active');
+        arButton.textContent='Ver no meu espaço';
+        xrSession=null;window.motorXRSession=null;scheduleDraw();
+      },{once:true});
+      arButton.textContent='Sair da realidade aumentada';
+      session.requestAnimationFrame(function frame(_time,xrFrame){
+        if(xrSession!==session)return;
+        session.requestAnimationFrame(frame);
+        const pose=xrFrame.getViewerPose(referenceSpace);
+        if(!pose){inverseModel=null;return}
+        if(!placed){
+          for(const hit of xrFrame.getHitTestResults(hitSource)){
+            const hitPose=hit.getPose(referenceSpace);
+            if(hitPose?.transform.matrix[5]>.85){placed=hitPose.transform.matrix;break}
+          }
+          if(placed){hitSource.cancel();xrHint.textContent='Toque em uma peça para ver seus detalhes.'}
+        }
+        advanceView(performance.now());
+        const selected=document.querySelector('.part-card.active')?.dataset.card;
+        const model=placed && multiply4(placed,multiply4(rotateY4(xrYaw),multiply4(scale4(.25),translate4(0,-floor,0))));
+        if(model){
+          inverseModel=DOMMatrix.fromFloat32Array(model).inverse();
+          renderedParts=buffers.filter(item=>xrPartVisible(item.part,selected))
+            .map(item=>({item,off:partOffset(item.part)}));
+        }
+        gl.bindFramebuffer(gl.FRAMEBUFFER,layer.framebuffer);
+        for(const view of pose.views){
+          const vp=layer.getViewport(view);
+          gl.viewport(vp.x,vp.y,vp.width,vp.height);gl.scissor(vp.x,vp.y,vp.width,vp.height);
+          gl.enable(gl.SCISSOR_TEST);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+          if(!model)continue;
+          const viewMatrix=view.transform.inverse.matrix;
+          const modelView=multiply4(viewMatrix,model);
+          const projection=view.projectionMatrix;
+
+          const shadowTransform=translate4(.18,floor+.003,-.12);
+          shadowTransform[0]=2.8+4.1*explosion;
+          shadowTransform[10]=1.65;
+          gl.useProgram(contactShadow.program);
+          gl.bindBuffer(gl.ARRAY_BUFFER,shadowPlane);
+          gl.enableVertexAttribArray(contactShadow.a.p);
+          gl.vertexAttribPointer(contactShadow.a.p,3,gl.FLOAT,false,0,0);
+          gl.uniformMatrix4fv(contactShadow.u.mvp,false,multiply4(projection,multiply4(modelView,shadowTransform)));
+          gl.depthMask(false);
+          gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+          gl.depthMask(true);
+
+          const {a,u}=material;
+          gl.useProgram(material.program);
+          const light=new DOMPoint(-.42,1,.32,0).matrixTransform(DOMMatrix.fromFloat32Array(viewMatrix));
+          const length=Math.hypot(light.x,light.y,light.z);
+          gl.uniform3f(u.key,light.x/length,light.y/length,light.z/length);
+          for(const {item,off} of renderedParts){
+            const partView=multiply4(modelView,translate4(...off));
+            gl.bindBuffer(gl.ARRAY_BUFFER,item.buffer);
+            gl.enableVertexAttribArray(a.p);gl.vertexAttribPointer(a.p,3,gl.FLOAT,false,24,0);
+            gl.enableVertexAttribArray(a.n);gl.vertexAttribPointer(a.n,3,gl.FLOAT,false,24,12);
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,item.indexBuffer);
+            gl.uniformMatrix4fv(u.modelView,false,partView);
+            gl.uniformMatrix4fv(u.mvp,false,multiply4(projection,partView));
+            gl.uniform3fv(u.color,item.rgb);
+            gl.uniform1f(u.metallic,item.metal);
+            gl.uniform1f(u.roughness,item.rough);
+            gl.uniform1f(u.selected,componentForMesh[item.part]===selected?1:0);
+            gl.drawElements(gl.TRIANGLES,item.count,gl.UNSIGNED_SHORT,0);
+          }
         }
       });
     }catch(error){console.error(`Falha ao ${phase}:`,error);document.body.classList.remove('xr-active');if(xrSession){try{await xrSession.end()}catch{}}xrSession=null;window.motorXRSession=null;const name=error?.name||'Erro';let message;if(name==='NotAllowedError')message='A sessão foi bloqueada. Permita a câmera para este site nas configurações do Chrome e tente novamente.';else if(name==='NotSupportedError'&&phase==='abrir a sessão immersive-ar')message='O Chrome não abriu a sessão AR. Confirme se o Google Play Services para AR está instalado e atualizado.';else if(name==='NotSupportedError'&&phase==='iniciar o hit-test')message='A sessão AR abriu, mas o Chrome não disponibilizou o hit-test. Confira as atualizações do Chrome e do Google Play Services para AR.';else if(name==='SecurityError')message='Abra o protótipo pelo link HTTPS e inicie a sessão pelo botão.';else message=`Falha ao ${phase} (${name}): ${error?.message||'tente atualizar o Chrome e o Google Play Services para AR.'}`;notify(message);}
