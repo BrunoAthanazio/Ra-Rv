@@ -461,11 +461,15 @@
       catch(error){if(error?.name!=='NotSupportedError')throw error;referenceSpace=await xrSession.requestReferenceSpace('local')}
       phase='iniciar o hit-test';
       const viewerSpace=await xrSession.requestReferenceSpace('viewer');const hitSource=await xrSession.requestHitTestSource({space:viewerSpace});
+      phase='preparar a interface AR';
       let placed=null, inverseModel=null, renderedParts=[];
       xrYaw=0;xrAngle.value='0';xrAngleValue.value='0°';xrAngleValue.textContent='0°';syncXrExplodeLabel();
-      xrPartInfo.hidden=true;
+      const showPartPanel=xrPartInfo && xrPartName && xrPartDescription;
+      const placementHint='Aponte para o chão para posicionar o motor.';
+      const selectionHint='Toque em uma peça para ver seus detalhes.';
+      if(showPartPanel)xrPartInfo.hidden=true;
       xrHint.hidden=false;
-      xrHint.textContent='Aponte para o chão para posicionar o motor.';
+      xrHint.textContent=placementHint;
       document.body.classList.add('xr-active');
       xrSession.addEventListener('select',event=>{
         if(!inverseModel)return;
@@ -482,11 +486,18 @@
         }
         if(picked){
           selectPart(picked);
-          xrPartName.textContent=details[picked].title;
-          xrPartDescription.textContent=details[picked].text;
         }
-        xrPartInfo.hidden=!picked;
-        xrHint.hidden=Boolean(picked);
+        const detail=details[picked];
+        if(showPartPanel){
+          if(detail){
+            xrPartName.textContent=detail.title;
+            xrPartDescription.textContent=detail.text;
+          }
+          xrPartInfo.hidden=!detail;
+          xrHint.hidden=Boolean(detail);
+        }else{
+          xrHint.textContent=detail?`${detail.title} · ${detail.text}`:selectionHint;
+        }
       });
       gl.enable(gl.DEPTH_TEST);gl.disable(gl.CULL_FACE);gl.clearColor(0,0,0,0);
       const arButton=document.getElementById('arBtn');
@@ -507,7 +518,7 @@
             const hitPose=hit.getPose(referenceSpace);
             if(hitPose?.transform.matrix[5]>.85){placed=hitPose.transform.matrix;break}
           }
-          if(placed){hitSource.cancel();xrHint.textContent='Toque em uma peça para ver seus detalhes.'}
+          if(placed){hitSource.cancel();xrHint.textContent=selectionHint}
         }
         advanceView(performance.now());
         const selected=document.querySelector('.part-card.active')?.dataset.card;

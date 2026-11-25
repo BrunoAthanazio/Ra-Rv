@@ -29,11 +29,12 @@ button:focus-visible, a:focus-visible {
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  grid-template-areas: "title title" "sidebar viewer";
   gap: 24px;
   padding-block: 32px 48px;
 }
-.title-row { grid-column: 1 / -1; }
+.title-row { grid-area: title; }
 .eyebrow, .focus-label {
   color: var(--blue-dark);
   font-size: 12px;
@@ -44,7 +45,7 @@ button:focus-visible, a:focus-visible {
 h1 { margin: 8px 0; font-size: clamp(30px, 4vw, 44px); line-height: 1.08; letter-spacing: -.025em; }
 h2 { margin: 0; font-size: 21px; }
 .subtitle { margin: 0; color: var(--muted); line-height: 1.5; }
-.main { min-width: 0; }
+.main { grid-area: viewer; min-width: 0; }
 .viewer, .sidebar, .components-panel, .part-card {
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -121,7 +122,7 @@ h2 { margin: 0; font-size: 21px; }
 .tool-hint b { color: var(--ink); font-size: 14px; }
 .tool-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
 
-.right-column { min-width: 0; align-self: start; display: grid; gap: 20px; }
+.sidebar-column { grid-area: sidebar; min-width: 0; align-self: start; display: grid; gap: 20px; }
 .components-panel { padding: 16px; }
 .parts-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px; margin-bottom: 12px; }
 .parts-head span { color: var(--muted); font-size: 13px; }
@@ -176,11 +177,11 @@ body.xr-active #xrOverlay { display: block; }
 
 @media (max-width: 940px) {
   .shell { width: min(100% - 40px, 1440px); }
-  .layout { grid-template-columns: minmax(0, 1fr) minmax(240px, 30%); gap: 16px; }
+  .layout { grid-template-columns: minmax(240px, 30%) minmax(0, 1fr); gap: 16px; }
 }
 @media (max-width: 760px) {
   .shell { width: calc(100% - 28px); }
-  .layout { grid-template-columns: minmax(0, 1fr); padding-top: 22px; }
+  .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "title" "viewer" "sidebar"; padding-top: 22px; }
 }
 @media (max-width: 420px) {
   .view-btn, .primary, .secondary { padding-inline: 9px; font-size: 13px; }
