@@ -354,10 +354,63 @@
   for(const id of ['xrExit','xrControls']){
     document.getElementById(id).addEventListener('beforexrselect',event=>event.preventDefault());
   }
-  xrAngle.addEventListener('input',()=>{xrYaw=Number(xrAngle.value)*Math.PI/180;xrAngleValue.value=`${xrAngle.value}°`;xrAngleValue.textContent=`${xrAngle.value}°`});
-  function syncXrExplodeLabel(){xrExplode.textContent=stage.classList.contains('exploded')?'MONTAR MOTOR':'EXPLODIR MOTOR'}
+  xrAngle?.addEventListener('input',()=>{xrYaw=Number(xrAngle.value)*Math.PI/180;xrAngleValue.value=`${xrAngle.value}°`;xrAngleValue.textContent=`${xrAngle.value}°`});
+  function syncXrExplodeLabel(){xrExplode.textContent=stage.classList.contains('exploded')?'Montar motor':'Explodir motor'}
   xrExplode.addEventListener('click',()=>{const view=stage.classList.contains('exploded')?'assembled':'exploded';document.querySelector(`.view-btn[data-view="${view}"]`)?.click();syncXrExplodeLabel()});
   syncXrExplodeLabel();
+  function bindJoystick(id,verticalOnly=false){
+    const element=document.getElementById(id);
+    const axes={x:0,y:0};
+    let pointer=null;
+    const keys=new Set();
+    const supportedKeys=verticalOnly?['ArrowUp','ArrowDown']:['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'];
+    function move(x,y){
+      const length=Math.max(1,Math.hypot(x,y));
+      axes.x=x/length;axes.y=y/length;
+      element?.style.setProperty('--stick-x',`${axes.x*22}px`);
+      element?.style.setProperty('--stick-y',`${axes.y*22}px`);
+    }
+    function reset(){
+      const captured=pointer;
+      pointer=null;
+      keys.clear();
+      move(0,0);
+      if(element?.hasPointerCapture(captured))element.releasePointerCapture(captured);
+    }
+    function movePointer(event){
+      if(event.pointerId!==pointer)return;
+      const box=element.getBoundingClientRect();
+      move(verticalOnly?0:(event.clientX-box.left-box.width/2)/25,
+        (event.clientY-box.top-box.height/2)/25);
+    }
+    element?.addEventListener('pointerdown',event=>{
+      if(pointer!==null || event.button!==0)return;
+      event.preventDefault();
+      keys.clear();
+      pointer=event.pointerId;
+      element.setPointerCapture(pointer);
+      movePointer(event);
+    });
+    element?.addEventListener('pointermove',movePointer);
+    for(const type of ['pointerup','pointercancel','lostpointercapture']){
+      element?.addEventListener(type,event=>{if(event.pointerId===pointer)reset()});
+    }
+    for(const type of ['keydown','keyup']){
+      element?.addEventListener(type,event=>{
+        if(!supportedKeys.includes(event.key))return;
+        event.preventDefault();
+        if(pointer!==null)return;
+        if(type==='keydown')keys.add(event.key);
+        else keys.delete(event.key);
+        move(Number(keys.has('ArrowRight'))-Number(keys.has('ArrowLeft')),
+          Number(keys.has('ArrowDown'))-Number(keys.has('ArrowUp')));
+      });
+    }
+    element?.addEventListener('blur',reset);
+    return {axes,reset};
+  }
+  const moveStick=bindJoystick('xrMoveStick');
+  const depthStick=bindJoystick('xrDepthStick',true);
   function multiply4(a,b){const o=new Float32Array(16);for(let c=0;c<4;c++)for(let r=0;r<4;r++)o[c*4+r]=a[r]*b[c*4]+a[4+r]*b[c*4+1]+a[8+r]*b[c*4+2]+a[12+r]*b[c*4+3];return o}
   function translate4(x,y,z){return new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,x,y,z,1])}
   function rotateY4(a){const c=Math.cos(a),s=Math.sin(a);return new Float32Array([c,0,-s,0,0,1,0,0,s,0,c,0,0,0,0,1])}
@@ -396,9 +449,10 @@
   const xrShadowFragment = `
     precision mediump float;
     varying vec2 uv;
+    uniform float strength;
     void main(){
       float radius=length(uv);
-      float opacity=(1.0-smoothstep(.22,1.0,radius))*.28;
+      float opacity=(1.0-smoothstep(.22,1.0,radius))*strength;
       gl_FragColor=vec4(0.0,0.0,0.0,opacity);
     }
   `;
@@ -451,7 +505,7 @@
       if(xrGl.makeXRCompatible)await xrGl.makeXRCompatible();
       const gl=xrGl,buffers=modelBuffers(gl);
       const material=programInfo(xrVertex,xrFragment,['p','n'],['mvp','modelView','color','key','selected','metallic','roughness'],gl);
-      const contactShadow=programInfo(xrShadowVertex,xrShadowFragment,['p'],['mvp'],gl);
+      const contactShadow=programInfo(xrShadowVertex,xrShadowFragment,['p'],['mvp','strength'],gl);
       const shadowPlane=upload([-1,0,-1, 1,0,-1, -1,0,1, 1,0,1],gl);
       phase='criar a camada de imagem AR';
       const layer=new XRWebGLLayer(xrSession,gl,{alpha:true,antialias:true});xrSession.updateRenderState({baseLayer:layer});
@@ -463,7 +517,12 @@
       const viewerSpace=await xrSession.requestReferenceSpace('viewer');const hitSource=await xrSession.requestHitTestSource({space:viewerSpace});
       phase='preparar a interface AR';
       let placed=null, inverseModel=null, renderedParts=[];
-      xrYaw=0;xrAngle.value='0';xrAngleValue.value='0°';xrAngleValue.textContent='0°';syncXrExplodeLabel();
+      let previousTime=null, x=0, z=0, height=0;
+      xrYaw=0;
+      if(xrAngle && xrAngleValue){xrAngle.value='0';xrAngleValue.value='0°';xrAngleValue.textContent='0°'}
+      moveStick.reset();
+      depthStick.reset();
+      syncXrExplodeLabel();
       const showPartPanel=xrPartInfo && xrPartName && xrPartDescription;
       const placementHint='Aponte para o chão para posicionar o motor.';
       const selectionHint='Toque em uma peça para ver seus detalhes.';
@@ -503,16 +562,20 @@
       const arButton=document.getElementById('arBtn');
       const session=xrSession;
       session.addEventListener('end',()=>{
+        moveStick.reset();
+        depthStick.reset();
         document.body.classList.remove('xr-active');
         arButton.textContent='Ver no meu espaço';
         xrSession=null;window.motorXRSession=null;scheduleDraw();
       },{once:true});
       arButton.textContent='Sair da realidade aumentada';
-      session.requestAnimationFrame(function frame(_time,xrFrame){
+      session.requestAnimationFrame(function frame(time,xrFrame){
         if(xrSession!==session)return;
         session.requestAnimationFrame(frame);
         const pose=xrFrame.getViewerPose(referenceSpace);
-        if(!pose){inverseModel=null;return}
+        if(!pose){inverseModel=null;previousTime=null;return}
+        const dt=previousTime===null?0:Math.max(0,Math.min(.05,(time-previousTime)/1000));
+        previousTime=time;
         if(!placed){
           for(const hit of xrFrame.getHitTestResults(hitSource)){
             const hitPose=hit.getPose(referenceSpace);
@@ -522,7 +585,25 @@
         }
         advanceView(performance.now());
         const selected=document.querySelector('.part-card.active')?.dataset.card;
-        const model=placed && multiply4(placed,multiply4(rotateY4(xrYaw),multiply4(scale4(.25),translate4(0,-floor,0))));
+        let model=null, groundModel=null;
+        if(placed){
+          xrYaw=(xrYaw+moveStick.axes.x*1.8*dt)%(2*Math.PI);
+          height=Math.min(2,Math.max(0,height-moveStick.axes.y*.65*dt));
+          const camera=pose.transform?.position;
+          if(camera && depthStick.axes.y){
+            const dx=placed[12]+x-camera.x,dz=placed[14]+z-camera.z;
+            const distance=Math.hypot(dx,dz);
+            if(distance>.001){
+              const movement=-depthStick.axes.y*.95*dt;
+              const step=movement>0?Math.min(movement,Math.max(0,6-distance))
+                :Math.max(movement,Math.min(0,.35-distance));
+              x+=dx/distance*step;z+=dz/distance*step;
+            }
+          }
+          const anchored=multiply4(translate4(x,0,z),placed);
+          groundModel=multiply4(anchored,multiply4(rotateY4(xrYaw),multiply4(scale4(.25),translate4(0,-floor,0))));
+          model=multiply4(translate4(0,height,0),groundModel);
+        }
         if(model){
           inverseModel=DOMMatrix.fromFloat32Array(model).inverse();
           renderedParts=buffers.filter(item=>xrPartVisible(item.part,selected))
@@ -545,7 +626,9 @@
           gl.bindBuffer(gl.ARRAY_BUFFER,shadowPlane);
           gl.enableVertexAttribArray(contactShadow.a.p);
           gl.vertexAttribPointer(contactShadow.a.p,3,gl.FLOAT,false,0,0);
-          gl.uniformMatrix4fv(contactShadow.u.mvp,false,multiply4(projection,multiply4(modelView,shadowTransform)));
+          const shadowView=multiply4(viewMatrix,groundModel);
+          gl.uniformMatrix4fv(contactShadow.u.mvp,false,multiply4(projection,multiply4(shadowView,shadowTransform)));
+          gl.uniform1f(contactShadow.u.strength,.28/(1+height*3));
           gl.depthMask(false);
           gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
           gl.depthMask(true);

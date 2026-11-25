@@ -17,7 +17,7 @@
 * { box-sizing: border-box; }
 body { margin: 0; }
 button { font: inherit; color: inherit; cursor: pointer; }
-button:focus-visible, a:focus-visible {
+button:focus-visible, a:focus-visible, .part-list:focus-visible {
   outline: 3px solid var(--blue-dark);
   outline-offset: 3px;
 }
@@ -29,8 +29,8 @@ button:focus-visible, a:focus-visible {
 
 .layout {
   display: grid;
-  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
-  grid-template-areas: "title title" "sidebar viewer";
+  grid-template-columns: minmax(185px, .85fr) minmax(0, 2.65fr) minmax(220px, 1fr);
+  grid-template-areas: "title title title" "components viewer specs";
   gap: 24px;
   padding-block: 32px 48px;
 }
@@ -122,11 +122,17 @@ h2 { margin: 0; font-size: 21px; }
 .tool-hint b { color: var(--ink); font-size: 14px; }
 .tool-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
 
-.sidebar-column { grid-area: sidebar; min-width: 0; align-self: start; display: grid; gap: 20px; }
-.components-panel { padding: 16px; }
+.components-panel { grid-area: components; min-width: 0; align-self: start; padding: 16px; }
 .parts-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px; margin-bottom: 12px; }
 .parts-head span { color: var(--muted); font-size: 13px; }
-.part-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.part-list {
+  display: grid;
+  gap: 8px;
+  max-height: min(55vh, 440px);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding: 4px 5px 4px 4px;
+}
 .part-card {
   display: flex;
   flex-direction: column;
@@ -142,7 +148,7 @@ h2 { margin: 0; font-size: 21px; }
 .part-card:hover { border-color: var(--blue); }
 .part-card.active { border-color: var(--blue); background: var(--blue-light); }
 
-.sidebar { align-self: start; overflow: hidden; }
+.sidebar { grid-area: specs; min-width: 0; align-self: start; overflow: hidden; }
 .side-title, .sidebar-content { padding: 20px; }
 .side-title { border-top: 4px solid var(--blue); }
 .product-image { display: grid; place-items: center; min-height: 158px; padding: 12px; background: var(--blue-light); }
@@ -173,15 +179,50 @@ body.xr-active #xrOverlay { display: block; }
 #xrControls { pointer-events: auto; bottom: calc(env(safe-area-inset-bottom) + 16px); left: 50%; transform: translateX(-50%); width: min(680px, 100% - 28px); display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px 10px; padding: 10px; }
 #xrAngleValue { margin-left: 6px; color: #c6e8ff; }
 #xrAngle { grid-column: 1 / -1; width: 100%; margin: 0; accent-color: #68c4ff; touch-action: pan-x; }
-#xrOverlay button:focus-visible { outline-color: var(--white); }
+#xrControls.xr-joysticks {
+  grid-template-columns: 1fr auto 1fr;
+  width: min(720px, 100% - 28px);
+  border: 0;
+  padding: 0;
+  background: transparent;
+  pointer-events: none;
+}
+.xr-joysticks > button, .xr-stick { pointer-events: auto; }
+.xr-stick-group { display: grid; justify-items: center; gap: 5px; justify-self: start; }
+.xr-stick-group:last-child { justify-self: end; }
+.xr-stick-group > span { background: #12324bee; border-radius: 4px; padding: 3px 5px; font-size: 12px; }
+.xr-stick {
+  width: 76px;
+  height: 76px;
+  border: 1px solid #ffffff80;
+  border-radius: 50%;
+  background: #12324bee;
+  display: grid;
+  place-items: center;
+  touch-action: none;
+  user-select: none;
+}
+.xr-stick-vertical { width: 48px; border-radius: 24px; }
+.xr-stick-thumb {
+  width: 32px;
+  height: 32px;
+  border: 2px solid #c6e8ff;
+  border-radius: 50%;
+  background: var(--blue);
+  pointer-events: none;
+  transform: translate(var(--stick-x, 0px), var(--stick-y, 0px));
+}
+body.xr-active:has(.xr-joysticks) :is(#xrHint, #xrPartInfo) { bottom: calc(env(safe-area-inset-bottom) + 126px); }
+#xrOverlay :focus-visible { outline: 3px solid var(--white); outline-offset: 3px; }
 
-@media (max-width: 940px) {
+@media (max-width: 1050px) {
   .shell { width: min(100% - 40px, 1440px); }
-  .layout { grid-template-columns: minmax(240px, 30%) minmax(0, 1fr); gap: 16px; }
+  .layout { gap: 16px; }
 }
 @media (max-width: 760px) {
   .shell { width: calc(100% - 28px); }
-  .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "title" "viewer" "sidebar"; padding-top: 22px; }
+  .layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "title" "viewer" "components" "specs"; padding-top: 22px; }
+  .part-list { max-height: 300px; }
 }
 @media (max-width: 420px) {
   .view-btn, .primary, .secondary { padding-inline: 9px; font-size: 13px; }
