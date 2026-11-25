@@ -54,7 +54,7 @@ Use um navegador compatível com **WebXR immersive-ar**, **Hit Test** e **DOM Ov
 | --- | --- | --- |
 | 1. Criação do modelo | Unity Hub, Unity Editor, prefab e assets da Unity | O motor foi organizado em conjuntos independentes, cada um com suas malhas, materiais e deslocamento para a vista explodida. |
 | 2. Preparação dos arquivos | Arquivo ZIP, `unzip`, terminal Bash e `rg` | O pacote foi extraído e inspecionado para localizar o prefab, os arquivos `.asset`, `.mat` e `.meta`. Os GUIDs dos arquivos `.meta` vinculam as referências do prefab aos assets. |
-| 3. Conversão | Python 3, NumPy, `pathlib`, `re`, `collections`, `json`, `struct`, glTF 2.0/GLB | Um script leu os assets serializados da Unity, converteu os eixos, reorganizou vértices e índices, traduziu os materiais para PBR e gravou os deslocamentos em `extras.explosionOffset`. |
+| 3. Conversão e inspeção | Python 3, NumPy, `pathlib`, `re`, `collections`, `json`, `struct`, glTF 2.0/GLB e GLTF/GLB Viewer para VS Code | Um script leu os assets serializados da Unity, converteu os eixos, reorganizou vértices e índices, traduziu os materiais para PBR e gravou os deslocamentos em `extras.explosionOffset`. A extensão permite inspecionar o resultado diretamente no editor. |
 | 4. Integração 3D | HTML, JavaScript, Fetch API, buffers tipados, WebGL, GLSL e Canvas 2D | O leitor do GLB foi integrado ao renderizador. Foram implementados iluminação, sombras, seleção de peças, vistas montada, explodida e interna e transições animadas. |
 | 5. Interface e referências | CSS, catálogo público WEG, Exa, `curl`, Python/Pillow, WebP, Arial/Helvetica | A interface recebeu a paleta azul, tipografia sem serifa, cards e foto do catálogo. A imagem foi recortada, redimensionada e salva em WebP. O layout evoluiu para componentes à esquerda, motor ao centro e ficha à direita. A tipografia e os cards são adaptações do projeto inspiradas nas referências públicas. |
 | 6. Realidade aumentada | WebXR Device API, Hit Test, DOM Overlay, Pointer Events, DOMMatrix, WebGL e GLSL | A experiência evoluiu de posicionamento por superfície para confirmação rápida do piso, sombra de contato, seleção por raio, painel de detalhes, transparência e dois joysticks. |
@@ -89,7 +89,15 @@ py -m venv .venv
 ```
 
 4. No Linux ou macOS, use `python3 -m venv .venv` e `./.venv/bin/python` para instalar o NumPy e executar o script. Gere primeiro em uma pasta separada se quiser preservar o GLB publicado para comparação.
-5. Compare as contagens com o original, verifique a geometria com o [glTF Validator do Khronos](https://github.khronos.org/glTF-Validator/) e teste as vistas no site com o arquivo gerado.
+5. Inspecione o GLB no VS Code, compare as contagens com o original e teste as vistas no site. Para verificar a conformidade do arquivo com a especificação glTF, use o [glTF Validator do Khronos](https://github.khronos.org/glTF-Validator/).
+
+### Visualizar o GLB no Visual Studio Code
+
+Instale a extensão **GLTF/GLB Viewer**, da **OHZI Interactive Studio**, para inspecionar em 3D o modelo convertido dos assets da Unity. [GLTF/GLB Viewer no Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=OHZIInteractiveStudio.ohzi-vscode-glb-viewer)
+
+1. No VS Code, abra **Extensões**, pesquise por `OHZIInteractiveStudio.ohzi-vscode-glb-viewer` e instale a extensão.
+2. No explorador de arquivos do VS Code, clique em `motor-w22.glb`. Se o visualizador não abrir automaticamente, clique com o botão direito e escolha **Abrir com → GLTF/GLB Viewer**.
+3. Arraste com o botão esquerdo para girar o motor, use o botão direito para deslocar a câmera e a roda do mouse para ajustar o zoom. Confira a hierarquia, as geometrias e os materiais nos painéis do visualizador.
 
 ### Estrutura esperada pelo leitor web
 
