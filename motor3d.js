@@ -358,12 +358,12 @@
   function syncXrExplodeLabel(){xrExplode.textContent=stage.classList.contains('exploded')?'Montar motor':'Explodir motor'}
   xrExplode.addEventListener('click',()=>{const view=stage.classList.contains('exploded')?'assembled':'exploded';document.querySelector(`.view-btn[data-view="${view}"]`)?.click();syncXrExplodeLabel()});
   syncXrExplodeLabel();
-  function bindJoystick(id,verticalOnly=false){
+  function bindJoystick(id,lockVertical=false){
     const element=document.getElementById(id);
     const axes={x:0,y:0};
     let pointer=null;
     const keys=new Set();
-    const supportedKeys=verticalOnly?['ArrowUp','ArrowDown']:['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'];
+    const supportedKeys=['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'];
     function move(x,y){
       const length=Math.max(1,Math.hypot(x,y));
       axes.x=x/length;axes.y=y/length;
@@ -380,10 +380,10 @@
     function movePointer(event){
       if(event.pointerId!==pointer)return;
       const box=element.getBoundingClientRect();
-      const x=verticalOnly?0:(event.clientX-box.left-box.width/2)/50;
+      const x=(event.clientX-box.left-box.width/2)/50;
       const y=(event.clientY-box.top-box.height/2)/50;
       // Suppress slight horizontal drift near the vertical axis.
-      const filteredX=Math.sign(x)*Math.max(0,Math.abs(x)-.36*Math.abs(y));
+      const filteredX=lockVertical?Math.sign(x)*Math.max(0,Math.abs(x)-.36*Math.abs(y)):x;
       move(filteredX,y);
     }
     element?.addEventListener('pointerdown',event=>{
@@ -412,8 +412,8 @@
     element?.addEventListener('blur',reset);
     return {axes,reset};
   }
-  const moveStick=bindJoystick('xrMoveStick');
-  const depthStick=bindJoystick('xrDepthStick',true);
+  const moveStick=bindJoystick('xrMoveStick',true);
+  const depthStick=bindJoystick('xrDepthStick');
   function multiply4(a,b){const o=new Float32Array(16);for(let c=0;c<4;c++)for(let r=0;r<4;r++)o[c*4+r]=a[r]*b[c*4]+a[4+r]*b[c*4+1]+a[8+r]*b[c*4+2]+a[12+r]*b[c*4+3];return o}
   function translate4(x,y,z){return new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,x,y,z,1])}
   function rotateY4(a){const c=Math.cos(a),s=Math.sin(a);return new Float32Array([c,0,-s,0,0,1,0,0,s,0,c,0,0,0,0,1])}
@@ -520,6 +520,7 @@
       const viewerSpace=await xrSession.requestReferenceSpace('viewer');const hitSource=await xrSession.requestHitTestSource({space:viewerSpace});
       phase='preparar a interface AR';
       let placed=null, inverseModel=null, renderedParts=[];
+      let floorScan=null;
       let previousTime=null, x=0, z=0, height=0;
       xrYaw=0;
       if(xrAngle && xrAngleValue){xrAngle.value='0';xrAngleValue.value='0°';xrAngleValue.textContent='0°'}
@@ -527,7 +528,8 @@
       depthStick.reset();
       syncXrExplodeLabel();
       const showPartPanel=xrPartInfo && xrPartName && xrPartDescription;
-      const placementHint='Aponte para o chão para posicionar o motor.';
+      const placementHint='Aponte para um piso plano e mova o tablet devagar para escanear a área.';
+      const scanningHint='Piso detectado. Mantenha o tablet firme por um instante.';
       const selectionHint='Toque em uma peça para ver seus detalhes.';
       if(showPartPanel)xrPartInfo.hidden=true;
       xrHint.hidden=false;
@@ -576,15 +578,33 @@
         if(xrSession!==session)return;
         session.requestAnimationFrame(frame);
         const pose=xrFrame.getViewerPose(referenceSpace);
-        if(!pose){inverseModel=null;previousTime=null;return}
+        if(!pose){inverseModel=null;previousTime=null;floorScan=null;return}
         const dt=previousTime===null?0:Math.max(0,Math.min(.05,(time-previousTime)/1000));
         previousTime=time;
         if(!placed){
+          let point=null;
           for(const hit of xrFrame.getHitTestResults(hitSource)){
             const hitPose=hit.getPose(referenceSpace);
-            if(hitPose?.transform.matrix[5]>.85){placed=hitPose.transform.matrix;break}
+            const matrix=hitPose?.transform.matrix;
+            if(matrix && matrix[5]>=.985){point=[matrix[12],matrix[13],matrix[14]];break}
           }
-          if(placed){hitSource.cancel();xrHint.textContent=selectionHint}
+          if(!point){
+            floorScan=null;
+          }else if(!floorScan || time-floorScan.last>125 ||
+            Math.hypot(point[0]-floorScan.origin[0],point[2]-floorScan.origin[2])>.10 ||
+            Math.abs(point[1]-floorScan.origin[1])>.025){
+            floorScan={origin:point,start:time,last:time,count:1,sum:[...point]};
+          }else{
+            floorScan.last=time;
+            floorScan.count++;
+            point.forEach((value,index)=>{floorScan.sum[index]+=value});
+            if(floorScan.count>=8 && time-floorScan.start>=600){
+              placed=translate4(...floorScan.sum.map(value=>value/floorScan.count));
+              hitSource.cancel();
+            }
+          }
+          const hint=placed?selectionHint:floorScan?scanningHint:placementHint;
+          if(xrHint.textContent!==hint)xrHint.textContent=hint;
         }
         advanceView(performance.now());
         const selected=document.querySelector('.part-card.active')?.dataset.card;
@@ -592,6 +612,14 @@
         if(placed){
           xrYaw=(xrYaw+moveStick.axes.x*1.8*dt)%(2*Math.PI);
           height=Math.min(2,Math.max(0,height-moveStick.axes.y*.65*dt));
+          const cameraMatrix=pose.transform?.matrix;
+          if(cameraMatrix && depthStick.axes.x){
+            const horizontal=Math.hypot(cameraMatrix[0],cameraMatrix[2]);
+            if(horizontal>.001){
+              const step=depthStick.axes.x*.95*dt/horizontal;
+              x+=cameraMatrix[0]*step;z+=cameraMatrix[2]*step;
+            }
+          }
           const camera=pose.transform?.position;
           if(camera && depthStick.axes.y){
             const dx=placed[12]+x-camera.x,dz=placed[14]+z-camera.z;
