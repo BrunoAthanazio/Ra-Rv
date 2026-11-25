@@ -528,8 +528,8 @@
       depthStick.reset();
       syncXrExplodeLabel();
       const showPartPanel=xrPartInfo && xrPartName && xrPartDescription;
-      const placementHint='Aponte para um piso plano e mova o tablet devagar para escanear a área.';
-      const scanningHint='Piso detectado. Mantenha o tablet firme por um instante.';
+      const placementHint='Aponte a câmera para uma área plana do piso.';
+      const scanningHint='Piso detectado. Posicionando o motor…';
       const selectionHint='Toque em uma peça para ver seus detalhes.';
       if(showPartPanel)xrPartInfo.hidden=true;
       xrHint.hidden=false;
@@ -589,21 +589,22 @@
           for(const hit of xrFrame.getHitTestResults(hitSource)){
             const hitPose=hit.getPose(referenceSpace);
             const matrix=hitPose?.transform.matrix;
-            if(matrix && matrix[5]>=.985){point=[matrix[12],matrix[13],matrix[14]];break}
+            if(matrix && matrix[5]>=.96){point=[matrix[12],matrix[13],matrix[14]];break}
           }
-          if(!point){
-            floorScan=null;
-          }else if(!floorScan || time-floorScan.last>125 ||
-            Math.hypot(point[0]-floorScan.origin[0],point[2]-floorScan.origin[2])>.10 ||
-            Math.abs(point[1]-floorScan.origin[1])>.025){
-            floorScan={origin:point,start:time,last:time,count:1,sum:[...point]};
-          }else{
-            floorScan.last=time;
-            floorScan.count++;
-            point.forEach((value,index)=>{floorScan.sum[index]+=value});
-            if(floorScan.count>=8 && time-floorScan.start>=600){
-              placed=translate4(...floorScan.sum.map(value=>value/floorScan.count));
-              hitSource.cancel();
+          if(floorScan && time-floorScan.last>250)floorScan=null;
+          if(point){
+            const [hitX,hitY,hitZ]=point;
+            // The hit moves across the same floor as the viewer moves. Compare only height.
+            if(!floorScan || Math.abs(hitY-floorScan.height)>.045){
+              floorScan={height:hitY,start:time,last:time,count:1};
+            }else{
+              floorScan.last=time;
+              floorScan.count++;
+              floorScan.height+=(hitY-floorScan.height)/floorScan.count;
+              if(floorScan.count>=3 && time-floorScan.start>=90){
+                placed=translate4(hitX,floorScan.height,hitZ);
+                hitSource.cancel();
+              }
             }
           }
           const hint=placed?selectionHint:floorScan?scanningHint:placementHint;
