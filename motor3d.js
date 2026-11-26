@@ -1,4 +1,5 @@
 (async () => {
+  // Encontra a área de renderização e cria os canvases usados pelos renderizadores.
   const host = document.querySelector('.motor-wrap');
   if (!host) return;
   const canvas = document.createElement('canvas');
@@ -14,17 +15,20 @@
   const status=document.createElement('span');
   status.className='model-status';status.setAttribute('role','status');
   status.textContent='Carregando motor W22…';host.append(status);
+  // Aguarda o modelo local antes de iniciar a renderização.
   let model;
   try{model=await carregarMotorW22('./motor-w22.glb')}
   catch(error){status.textContent='Falha ao abrir o modelo. Sirva a pasta por HTTP e recarregue.';console.error(error);return}
   status.remove();
   const {surfaces,offsets,floor}=model;
+  // Mapeia as malhas do modelo para os componentes selecionáveis na interface.
   const componentForMesh={housing:'casing',stator:'stator',rotor:'rotor',shaft:'shaft',bearingL:'bearings',bearingR:'bearings',endcapL:'endcaps',endcapR:'endcaps',fan:'fan',fanGuard:'fanGuard',terminal:'terminal',terminalLid:'terminal'};
   const colorCache=new Map();
   const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
   let explosion=Number(stage.classList.contains('exploded'));
   let cutaway=Number(stage.classList.contains('internal'));
   let transition=null;
+  // Interpola as transições entre as vistas montada, explodida e interna.
   function advanceView(now){
     if(!transition)return;
     const {start,duration,from,to,fromCut,toCut}=transition;
@@ -58,6 +62,7 @@
   let glProgram=null,glParts=[];
   // The light sees the motor from above and to the left. Its texture stores the
   // highest surface along each ray, shared by the castings and the floor.
+  // Shaders e utilitários do renderizador WebGL da visualização principal.
   const lightProjection = `
     uniform float lightWidth;
     vec2 lightUV(vec3 p) {
@@ -138,6 +143,7 @@
   const shadowSize=1024;
   const zeroOffset=[0,0,0];
 
+  // Cria programas e buffers WebGL reutilizados na cena.
   function programInfo(vertex,fragment,attributes,uniforms,context=gl){
     const gl=context;
     const program=gl.createProgram();
@@ -222,6 +228,7 @@
       gl.drawElements(gl.TRIANGLES,item.count,gl.UNSIGNED_SHORT,0);
     }else gl.drawArrays(gl.TRIANGLES,0,item.count);
   }
+  // Renderiza o modelo com materiais, iluminação e sombras.
   function drawGl(){
     const w=host.clientWidth,h=host.clientHeight;
     if(!w||!h)return;
@@ -272,6 +279,7 @@
   }
   function resize(){const r=host.getBoundingClientRect(),d=Math.min(devicePixelRatio||1,2);canvas.width=Math.max(1,Math.round(r.width*d));canvas.height=Math.max(1,Math.round(r.height*d));canvas.style.width=r.width+'px';canvas.style.height=r.height+'px';ctx.setTransform(d,0,0,d,0,0);draw()}
   // Project indexed vertices once per surface for picking and the software renderer.
+  // Projeta as superfícies para o renderizador 2D de compatibilidade.
   function projectScene(w,h){
     const exploded=explosion>0,internal=cutaway>0;
     const selected=document.querySelector('.part-card.active')?.dataset.card;
@@ -317,6 +325,7 @@
   }
   try{initGlRenderer()}catch(error){console.warn('WebGL renderer unavailable; using canvas fallback.',error);glProgram=null}
   new ResizeObserver(resize).observe(host);resize();new MutationObserver(changeView).observe(stage,{attributes:true,attributeFilter:['class']});
+  // Seleciona o canvas ativo e conecta gestos, seleção e controles do modelo.
   const dragCanvas=glProgram?glCanvas:canvas;
   dragCanvas.addEventListener('pointerdown',e=>{e.stopPropagation();dragging=true;moved=false;sx=lx=e.clientX;sy=ly=e.clientY;dragCanvas.setPointerCapture(e.pointerId)});
   dragCanvas.addEventListener('pointermove',e=>{e.stopPropagation();if(!dragging)return;yaw-=(e.clientX-lx)*.009;pitch=Math.max(-.55,Math.min(.55,pitch+(e.clientY-ly)*.006));lx=e.clientX;ly=e.clientY;if(Math.hypot(e.clientX-sx,e.clientY-sy)>5)moved=true;scheduleDraw()});
@@ -344,6 +353,7 @@
   partCards.forEach(card=>card.addEventListener('click',scheduleDraw));host.classList.add('webgl-ready');
 
   // Immersive WebXR renderer: camera passthrough is supplied by the XR device.
+  // Estado e controles específicos da sessão de realidade aumentada.
   let xrSession=null, xrCanvas=null, xrGl=null;
   let immersiveArSupport=null;
   if(navigator.xr?.isSessionSupported)navigator.xr.isSessionSupported('immersive-ar').then(value=>{immersiveArSupport=value}).catch(()=>{immersiveArSupport=false});
@@ -358,6 +368,7 @@
   function syncXrExplodeLabel(){xrExplode.textContent=stage.classList.contains('exploded')?'Montar motor':'Explodir motor'}
   xrExplode.addEventListener('click',()=>{const view=stage.classList.contains('exploded')?'assembled':'exploded';document.querySelector(`.view-btn[data-view="${view}"]`)?.click();syncXrExplodeLabel()});
   syncXrExplodeLabel();
+  // Liga controles na tela e no teclado ao posicionamento do modelo em AR.
   function bindJoystick(id,lockVertical=false){
     const element=document.getElementById(id);
     const axes={x:0,y:0};
@@ -418,6 +429,7 @@
   function translate4(x,y,z){return new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,x,y,z,1])}
   function rotateY4(a){const c=Math.cos(a),s=Math.sin(a);return new Float32Array([c,0,-s,0,0,1,0,0,s,0,c,0,0,0,0,1])}
   function scale4(s){return new Float32Array([s,0,0,0,0,s,0,0,0,0,s,0,0,0,0,1])}
+  // Shaders, interseções e buffers usados para desenhar o modelo em AR.
   const xrVertex = `
     attribute vec3 p, n;
     uniform mat4 mvp, modelView;
@@ -492,6 +504,7 @@
       return {...surface,buffer,indexBuffer,count:surface.indices.length};
     });
   }
+  // Inicia a sessão AR, posiciona o motor e encerra os recursos ao sair.
   async function startXR(){
     if(!navigator.xr){notify('WebXR não está disponível neste navegador. Abra o link em um navegador compatível com AR.');return}
     if(immersiveArSupport===false){notify('O Chrome não está oferecendo sessões WebXR AR neste tablet. Confira o Google Play Services para AR e as permissões do Chrome.');return}

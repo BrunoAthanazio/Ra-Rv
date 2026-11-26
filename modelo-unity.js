@@ -1,4 +1,5 @@
-// Leitor para o GLB exportado de Motor_W22.prefab (malhas indexadas, sem texturas externas).
+// Carrega e converte o modelo GLB exportado do Motor_W22.prefab.
+// O arquivo usa malhas indexadas e não depende de texturas externas.
 async function carregarMotorW22(url) {
   const response = await fetch(url);
   if (!response.ok) throw new Error('Falha ao carregar o GLB: ' + response.status);
@@ -9,12 +10,14 @@ async function carregarMotorW22(url) {
   const jsonLength = header.getUint32(12, true);
   const doc = JSON.parse(new TextDecoder().decode(new Uint8Array(bytes, 20, jsonLength)));
   const binary = 28 + jsonLength;
+  // Cria a visualização tipada dos dados geométricos armazenados no GLB.
   function attribute(id) {
     const a = doc.accessors[id], view = doc.bufferViews[a.bufferView];
     const Type = a.componentType === 5123 ? Uint16Array : Float32Array;
     return new Type(bytes, binary + (view.byteOffset || 0) + (a.byteOffset || 0),
       a.count * ({VEC3: 3, SCALAR: 1}[a.type]));
   }
+  // Relaciona os nomes do modelo às chaves usadas pela interface.
   const components = {
     Housing:'housing', Shaft:'shaft', Rotor:'rotor', Stator:'stator', TerminalBox:'terminal',
     FrontBearing:'bearingL', RearBearing:'bearingR', FrontEndShield:'endcapL',
@@ -22,6 +25,7 @@ async function carregarMotorW22(url) {
   };
   const scale=.70, surfaces=[], offsets={};
   let floor=Infinity;
+  // Percorre grupos, malhas e primitivas para preparar as superfícies.
   for (const id of doc.scenes[doc.scene].nodes) {
     const group=doc.nodes[id], part=components[group.name];
     offsets[part]=group.extras.explosionOffset.map(v=>v*scale);

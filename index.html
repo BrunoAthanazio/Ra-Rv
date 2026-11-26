@@ -90,11 +90,15 @@
       </div>
     </div>
   </div>
+  <!-- Interações da interface, seleção de peças e troca de vistas. -->
   <script>
+    // Textos apresentados quando cada componente é selecionado.
     const details={casing:{title:'Carcaça',text:'Estrutura externa com aletas que protege o conjunto e ajuda a dissipar o calor.',hint:'Estrutura e aletas de refrigeração.'},stator:{title:'Estator',text:'Núcleo laminado e enrolamentos fixos que produzem o campo magnético do motor.',hint:'Núcleo laminado e enrolamentos de cobre.'},rotor:{title:'Rotor',text:'Gaiola condutora que gira dentro do estator e transforma o campo magnético em torque.',hint:'Gaiola condutora girante.'},shaft:{title:'Eixo',text:'Peça que atravessa o rotor e leva a potência mecânica para a aplicação.',hint:'Transmissão mecânica.'},bearings:{title:'Rolamentos',text:'Rolamentos nas duas extremidades sustentam o eixo e permitem sua rotação.',hint:'Apoio do eixo nos dois lados.'},endcaps:{title:'Tampas',text:'Tampas dianteira e traseira fecham a carcaça e alojam os rolamentos.',hint:'Fechamento e alojamento dos rolamentos.'},fan:{title:'Ventilador',text:'Impulsor traseiro que movimenta o ar para refrigerar o motor durante o funcionamento.',hint:'Impulsor de refrigeração.'},fanGuard:{title:'Proteção do ventilador',text:'Cobertura traseira que protege o ventilador e direciona o fluxo de ar.',hint:'Proteção traseira e guia do fluxo de ar.'},terminal:{title:'Caixa de ligação',text:'Compartimento que protege os terminais usados para conectar o motor à alimentação elétrica.',hint:'Terminais elétricos protegidos.'}};
     const stage=document.getElementById('stage'),toast=document.getElementById('toast');let toastTimer,angle=0;
+    // Exibe uma mensagem temporária para confirmar ações da interface.
     function notify(message){toast.textContent=message;toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),message.length>65?9000:2600)}
     function setPressed(button,pressed){button.classList.toggle('active',pressed);button.setAttribute('aria-pressed',String(pressed))}
+    // Atualiza o destaque visual e os textos do componente em foco.
     function selectPart(id){const data=details[id];if(!data)return;document.querySelectorAll('.part-card').forEach(card=>setPressed(card,card.dataset.card===id));document.querySelectorAll('.part').forEach(x=>x.classList.toggle('selected',x.dataset.part===id));document.getElementById('focusTitle').textContent=data.title;document.getElementById('focusText').textContent=data.text;document.getElementById('hintTitle').textContent=data.title;document.getElementById('hintText').textContent=data.hint}
     function clearPartSelection(){
       document.querySelectorAll('.part-card').forEach(button=>setPressed(button,false));
@@ -107,6 +111,7 @@
     document.querySelectorAll('.part-card').forEach(b=>b.addEventListener('click',()=>selectPart(b.dataset.card)));
     document.querySelectorAll('.part[data-part]').forEach(p=>p.addEventListener('click',()=>selectPart(p.dataset.part)));
 
+    // Mantém os controles e as classes da cena sincronizados ao trocar a vista.
     document.querySelectorAll('.view-btn').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.view-btn').forEach(button=>setPressed(button,button===b));stage.classList.toggle('exploded',b.dataset.view==='exploded');stage.classList.toggle('internal',b.dataset.view==='internal');document.querySelector('.part-stator').setAttribute('opacity',b.dataset.view==='exploded'?'.95':'0');notify(b.dataset.view==='internal'?'Vista interna: carcaça transparente':b.dataset.view==='exploded'?'Vista explodida: componentes separados':'Vista montada: motor completo')}));
     let dragging=false,startX=0;stage.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;dragging=true;startX=e.clientX;stage.setPointerCapture(e.pointerId)});stage.addEventListener('pointermove',e=>{if(!dragging)return;angle+=(e.clientX-startX)*.35;startX=e.clientX;document.querySelector('.motor-svg').style.transform=`rotateY(${angle}deg)`});stage.addEventListener('pointerup',()=>dragging=false);stage.addEventListener('pointercancel',()=>dragging=false);
     document.getElementById('resetBtn').addEventListener('click',()=>{angle=0;document.querySelector('.motor-svg').style.transform='';document.querySelectorAll('.view-btn')[0].click();clearPartSelection();notify('Visualização reiniciada')});

@@ -1,4 +1,5 @@
 :root {
+  /* Paleta e valores compartilhados pela interface. */
   --blue: #0064a6;
   --blue-dark: #004b7d;
   --blue-light: #eaf4fb;
@@ -14,6 +15,7 @@
   background: var(--page);
 }
 
+/* Estrutura geral, cabeçalho e tipografia. */
 * { box-sizing: border-box; }
 body { margin: 0; }
 button { font: inherit; color: inherit; cursor: pointer; }
@@ -46,6 +48,7 @@ h1 { margin: 8px 0; font-size: clamp(30px, 4vw, 44px); line-height: 1.08; letter
 h2 { margin: 0; font-size: 21px; }
 .subtitle { margin: 0; color: var(--muted); line-height: 1.5; }
 .main { grid-area: viewer; min-width: 0; }
+/* Cartões, visualizador e controles de navegação. */
 .viewer, .sidebar, .components-panel, .part-card {
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -84,6 +87,7 @@ h2 { margin: 0; font-size: 21px; }
 .view-btn.active, .primary { background: var(--blue); color: var(--white); }
 .primary:hover { background: var(--blue-dark); }
 .secondary { border-color: var(--blue); background: var(--white); color: var(--blue-dark); }
+/* Área de renderização do motor e sobreposições informativas. */
 .stage {
   position: relative;
   isolation: isolate;
